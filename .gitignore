@@ -1,0 +1,6 @@
+*.o
+*.so
+test_parser
+microcat
+shell
+
