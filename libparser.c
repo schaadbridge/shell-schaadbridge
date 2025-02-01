@@ -81,3 +81,8 @@ void get_command(char* line, struct Cmd* cmdline)
   }
   cmdline->cmd2_argv[argv_idx] = NULL;
 }
+
+void free_command(struct Cmd* cmdline) {
+  free(cmdline->cmd1_argv);
+  free(cmdline->cmd2_argv);
+}

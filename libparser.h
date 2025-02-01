@@ -13,5 +13,7 @@ struct Cmd {
 
 extern void get_command(char* line, struct Cmd* cmdline);
 
+extern void free_command(struct Cmd* cmdline);
+
 #endif
 
