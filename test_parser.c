@@ -1,3 +1,13 @@
+/**
+ * CMSC B355 Assignment 2, Part 2: Parser
+ * 
+ * The main driver for part 2, exercising the functionality in libparser.c and 
+ * printing the contents of the struct Cmd.
+ * 
+ * @author: Bridge Schaad
+ * @version: February 1, 2025
+ */
+
 #include "libparser.h"
 #include <string.h>
 

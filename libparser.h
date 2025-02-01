@@ -8,7 +8,7 @@ struct Cmd {
   char **cmd2_argv;
   char *cmd1_fds[3];
   char *cmd2_fds[3];
-  int max_argv;
+  const int max_argv = 8;
 };
 
 extern void get_command(char* line, struct Cmd* cmdline);

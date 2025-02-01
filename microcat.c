@@ -1,7 +1,16 @@
+/**
+ * CMSC B355 Assignment 2, Part 1: Microcat
+ * 
+ * Implements a simple Unix "cat" command with no flags. Concatenates and 
+ * prints files to standard output. If no arguments are given, takes input 
+ * from stdin. 
+ * 
+ * @author: Bridge Schaad
+ * @version: February 1, 2025
+ */
+
 #include <unistd.h>
 #include <fcntl.h>
-// #include <fstream>
-// #include <iostream>
 
 int main(int argc, char **argv)
 {

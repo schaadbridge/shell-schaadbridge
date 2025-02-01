@@ -1,3 +1,13 @@
+/**
+ * CMSC B355 Assignment 2, Part 3: Simple Shell
+ * 
+ * Implements a cat-themed shell using readline() for user input, fork(), and 
+ * execvp() for child processes. The shell quits when the user types "exit".
+ * 
+ * @author: Bridge Schaad
+ * @version: February 1, 2025
+ */
+
 #include "libparser.h"
 #include <string.h>
 #include <stdio.h>
@@ -6,20 +16,43 @@
 #include <readline/history.h>
 #include <sys/wait.h>
 #include <sys/types.h>
+#include <pwd.h>
+
+#define ANSI_COLOR_PURPLE "\x1b[35m"
+#define ANSI_COLOR_RESET  "\x1b[0m"
 
 int main()
 {
-  // starting implementation from class slides pseudocode
-  // char* prompt, host, pwd;
-  // int host_ret = gethostname(host, 10);
+  printf("    /\\_/\\ \n"
+         "= ( • . • ) =\n"
+         "   /      \\     \n\n");
+
+  char hostName[32];
+  char cwdName[128];
+  char* pwname = getpwuid(geteuid())->pw_name;
+  int host_ret = gethostname(hostName, 32);
+  getcwd(cwdName, 128);
+
+  char* prompt;
+
+  if (host_ret == 0 || cwdName == NULL || pwname == NULL) {
+    prompt = (char*) malloc((strlen(ANSI_COLOR_PURPLE) + strlen(ANSI_COLOR_RESET) + strlen(hostName) +
+       strlen(cwdName) + strlen(pwname) + 20) * sizeof(char));
+    sprintf( prompt, ANSI_COLOR_PURPLE "%s@%s:%s$ meow <3 -- " ANSI_COLOR_RESET, pwname, hostName, cwdName);
+  } else {
+    printf("host_ret (0 for success): %d\n" 
+            "cwdName (non-null for success): %s\n"
+            "pwname (non-null for success): %s\n", host_ret, cwdName, pwname);
+    exit(1);
+  }
   while (1) {
     // read input in using readline
-    // char *prompt = getpwid(geteuid()) + "@" + gethostname() + ":" getcwd() + "<3 -- ";
-    char *line = readline("prompt <3 --  ");
+    char *line = readline( prompt );
     add_history(line);
 
     // Quit if the user types "exit" 
     if (strcmp("exit", line) == 0) {
+      printf(ANSI_COLOR_PURPLE "purrrrrrrrrrr\n" ANSI_COLOR_RESET);
       exit(1);
     }
 

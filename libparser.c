@@ -1,11 +1,19 @@
+/**
+ * CMSC B355 Assignment 2, Part 2: Parser
+ * 
+ * Parses CLI input with at most 1 pipe into Cmd struct. Header file sets the
+ * max number of arguments per process.
+ * 
+ * @author: Bridge Schaad
+ * @version: February 1, 2025
+ */
+
 #include "libparser.h"
 #include <stdlib.h>
 #include <string.h>
 
 void get_command(char* line, struct Cmd* cmdline)
-{
-  cmdline->max_argv = 8;
-  
+{ 
   // initialize input/output redirects to null
   for (int i = 0; i < 3; i++) {
     cmdline->cmd1_fds[i] = NULL;
@@ -82,6 +90,10 @@ void get_command(char* line, struct Cmd* cmdline)
   cmdline->cmd2_argv[argv_idx] = NULL;
 }
 
+/** 
+TODO: ask why??? this doesn't seem to be necessary/isn't changing number of 
+bytes in use after execution
+*/ 
 void free_command(struct Cmd* cmdline) {
   free(cmdline->cmd1_argv);
   free(cmdline->cmd2_argv);
