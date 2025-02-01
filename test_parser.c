@@ -1,9 +1,34 @@
 #include "libparser.h"
 #include <string.h>
 
+
 void print_cmd(struct Cmd* cmd)
 {
   // implement me
+  printf("cmd1_args: [");
+  int i;
+  for (i = 0; i < cmd->max_argv; i++) {
+    printf("%s ", cmd->cmd1_argv[i]);
+    if (cmd->cmd1_argv[i] == NULL) {
+      break;
+    }
+  }
+  printf("]\ncmd2_args: [");
+  for (i = 0; i < cmd->max_argv; i++) {
+    printf("%s ", cmd->cmd2_argv[i]);
+    if (cmd->cmd2_argv[i] == NULL) {
+      break;
+    }
+  }
+  printf("]\n\n");
+  for (int j = 0; j < 3; j++) {
+    printf("cmd1_fds[%d]: %s\n", j, cmd->cmd1_fds[j]);
+  }
+  printf("\n");
+  for (int j = 0; j < 3; j++) {
+    printf("cmd2_fds[%d]: %s\n", j, cmd->cmd2_fds[j]);
+  }
+  printf("\n\n");
 }
 
 int main()
