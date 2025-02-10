@@ -5,12 +5,10 @@
  * Implements a cat-themed shell using readline() for user input, fork(), and 
  * execvp() for child processes. The shell quits when the user types "exit".
  * 
- * Known issues:
- * leaves a child process hanging for commands not found, such as "test", or "exit ",
- * leading to the "exit" command required as many times as child processes are hanging
+ * Better Shell supports file redirection and piping.
  * 
  * @author: Bridge Schaad
- * @version: February 7, 2025
+ * @version: February 10, 2025
  */
 
 #include <err.h>
@@ -63,7 +61,7 @@ void single_command(struct Cmd* cmd) {
     if (cmd->cmd1_fds[0] != NULL) { // input redirection
       int fd_in = open(cmd->cmd1_fds[0], O_RDONLY);
       if (fd_in == -1) {
-        check_err("67");
+        check_err("open");
       }
       if (dup2(fd_in, STDIN_FILENO) == -1) {
         check_err("dup2");
@@ -73,7 +71,7 @@ void single_command(struct Cmd* cmd) {
     if (cmd->cmd1_fds[1] != NULL) { // output redirection
       int fd_out = open(cmd->cmd1_fds[1], O_WRONLY | O_CREAT | O_TRUNC);
       if (fd_out == -1) {
-        check_err("78");
+        check_err("open");
       }
       if (dup2(fd_out, STDOUT_FILENO) == -1) {
         check_err("dup2");
@@ -83,7 +81,7 @@ void single_command(struct Cmd* cmd) {
     if (cmd->cmd1_fds[2] != NULL) { // error redirection
       int fd_err = open(cmd->cmd1_fds[2], O_WRONLY | O_CREAT | O_TRUNC);
       if (fd_err == -1) {
-        check_err("88");
+        check_err("open");
       }
       if (dup2(fd_err, STDERR_FILENO) == -1) {
         check_err("dup2");
@@ -91,14 +89,13 @@ void single_command(struct Cmd* cmd) {
       close(fd_err);
     }
     if (execvp(cmd->cmd1_argv[0], cmd->cmd1_argv) == -1) {
-      check_err("63");
+      check_err("execvp");
     }
 
-    // free command memory ?? confirm.
     free_command(cmd);
   } else {
     if (waitpid(pid, &status, 0) == -1) {
-      check_err("66");
+      check_err("waitpid");
     };
   }
 }
@@ -124,23 +121,17 @@ void pipe_command(struct Cmd* cmd) {
     if (cmd->cmd1_fds[0] != NULL) { // input redirection
       int fd_in = open(cmd->cmd1_fds[0], O_RDONLY);
       if (fd_in == -1) {
-        check_err("67");
+        check_err("open");
       }
       if (dup2(fd_in, STDIN_FILENO) == -1) {
         check_err("dup2");
       }
-      close(fd_in);
+      if (close(fd_in) == -1) {
+        check_err("close");
+      }
     }
-    // if (cmd->cmd1_fds[1] != NULL) { // output redirection
-    //   int fd_out = open(cmd->cmd1_fds[1], O_WRONLY | O_CREAT | O_TRUNC);
-    //   if (fd_out == -1) {
-    //     check_err("78");
-    //   }
-    //   if (dup2(fd_out, STDOUT_FILENO) == -1) {
-    //     check_err("dup2");
-    //   }
-    //   // close(fd_out);
-    // }
+    // Skip std_out redirection for first command in fork, 
+    // must pipe it to second command
     if (cmd->cmd1_fds[2] != NULL) { // error redirection
       int fd_err = open(cmd->cmd1_fds[2], O_WRONLY | O_CREAT | O_TRUNC, S_IRWXO);
       if (fd_err == -1) {
@@ -164,7 +155,7 @@ void pipe_command(struct Cmd* cmd) {
     if (execvp(cmd->cmd1_argv[0], cmd->cmd1_argv) == -1) {
       check_err("exec");
     }
-    // free command ?? confirm.
+
     free_command(cmd);
   } else { // ends child1 body
     cpid2 = fork();
@@ -173,20 +164,12 @@ void pipe_command(struct Cmd* cmd) {
       err(EXIT_FAILURE, "fork");
 
     if (cpid2 == 0) { // child 2 body: 
-      // if (cmd->cmd1_fds[0] != NULL) { // input redirection
-      //   int fd_in = open(cmd->cmd1_fds[0], O_RDONLY);
-      //   if (fd_in == -1) {
-      //     check_err("67");
-      //   }
-      //   if (dup2(fd_in, STDIN_FILENO) == -1) {
-      //     check_err("dup2");
-      //   }
-      //   close(fd_in);
-      // }
+      // skip std_in redirection on second command in pipe
+      // must pipe from first command
       if (cmd->cmd2_fds[1] != NULL) { // output redirection
         int fd_out = open(cmd->cmd2_fds[1], O_WRONLY | O_CREAT | O_TRUNC);
         if (fd_out == -1) {
-          check_err("78");
+          check_err("open");
         }
         if (dup2(fd_out, STDOUT_FILENO) == -1) {
           check_err("dup2");
@@ -196,35 +179,41 @@ void pipe_command(struct Cmd* cmd) {
       if (cmd->cmd2_fds[2] != NULL) { // error redirection
         int fd_err = open(cmd->cmd2_fds[2], O_WRONLY | O_CREAT | O_TRUNC);
         if (fd_err == -1) {
-          check_err("88");
+          check_err("open");
         }
         if (dup2(fd_err, STDERR_FILENO) == -1) {
           check_err("dup2");
         }
-        close(fd_err);
+        if (close(fd_err) == -1) {
+          check_err("close");
+        }
       }
 
       // child2 map to standard output
       if (close(pipefd[1]) == -1)
-        err(EXIT_FAILURE, "close");
+        check_err("close");
       int dup2_ret = dup2(pipefd[0], STDIN_FILENO);
       if (dup2_ret == -1) {
-        err(EXIT_FAILURE, "dup");
+        check_err("dup2");
       }
       // child2 close input on pipe
       if (close(pipefd[0]) == -1)
-        err(EXIT_FAILURE, "close");
+        check_err("close");
       if (execvp(cmd->cmd2_argv[0], cmd->cmd2_argv) == -1) {
         check_err("execvp");
       }
       free_command(cmd);
     } else { // ends child2 body, only the parent reaches here!!
       if (close(pipefd[0]) == -1)
-        err(EXIT_FAILURE, "close");
+        check_err( "close");
       if (close(pipefd[1]) == -1)
         err(EXIT_FAILURE, "close");
-      waitpid(cpid1, &status1, 0);
-      waitpid(cpid2, &status2, 0);
+      if (waitpid(cpid1, &status1, 0) == -1) {
+        check_err("waitpid child 1");
+      }
+      if (waitpid(cpid2, &status2, 0) == -1) {
+        check_err("waitpid child 2");
+      }
     }
   }
 }
@@ -258,7 +247,7 @@ int main()
       if (strcmp(cmd.cmd1_argv[0], "cd") == 0) {
         int ret = chdir(cmd.cmd1_argv[1]);
         if (ret != 0) {
-          check_err("156");
+          check_err("chdir");
         } else {
           prompt_ret = get_prompt(prompt);
         }
@@ -271,8 +260,9 @@ int main()
         }
       }
     }
-
-    free_command(&cmd);
+    if (&cmd != NULL) {
+      free_command(&cmd);
+    }
     free(line);
   }
 }
