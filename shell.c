@@ -69,7 +69,7 @@ void single_command(struct Cmd* cmd) {
       close(fd_in);
     }
     if (cmd->cmd1_fds[1] != NULL) { // output redirection
-      int fd_out = open(cmd->cmd1_fds[1], O_WRONLY | O_CREAT | O_TRUNC);
+      int fd_out = open(cmd->cmd1_fds[1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
       if (fd_out == -1) {
         check_err("open");
       }
@@ -79,7 +79,7 @@ void single_command(struct Cmd* cmd) {
       close(fd_out);
     }
     if (cmd->cmd1_fds[2] != NULL) { // error redirection
-      int fd_err = open(cmd->cmd1_fds[2], O_WRONLY | O_CREAT | O_TRUNC);
+      int fd_err = open(cmd->cmd1_fds[2], O_WRONLY | O_CREAT | O_TRUNC, 0644);
       if (fd_err == -1) {
         check_err("open");
       }
@@ -133,7 +133,7 @@ void pipe_command(struct Cmd* cmd) {
     // Skip std_out redirection for first command in fork, 
     // must pipe it to second command
     if (cmd->cmd1_fds[2] != NULL) { // error redirection
-      int fd_err = open(cmd->cmd1_fds[2], O_WRONLY | O_CREAT | O_TRUNC, S_IRWXO);
+      int fd_err = open(cmd->cmd1_fds[2], O_WRONLY | O_CREAT | O_TRUNC, 0644);
       if (fd_err == -1) {
         check_err("88");
       }
