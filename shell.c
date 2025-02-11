@@ -167,7 +167,7 @@ void pipe_command(struct Cmd* cmd) {
       // skip std_in redirection on second command in pipe
       // must pipe from first command
       if (cmd->cmd2_fds[1] != NULL) { // output redirection
-        int fd_out = open(cmd->cmd2_fds[1], O_WRONLY | O_CREAT | O_TRUNC);
+        int fd_out = open(cmd->cmd2_fds[1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fd_out == -1) {
           check_err("open");
         }
@@ -177,7 +177,7 @@ void pipe_command(struct Cmd* cmd) {
         close(fd_out);
       }
       if (cmd->cmd2_fds[2] != NULL) { // error redirection
-        int fd_err = open(cmd->cmd2_fds[2], O_WRONLY | O_CREAT | O_TRUNC);
+        int fd_err = open(cmd->cmd2_fds[2], O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fd_err == -1) {
           check_err("open");
         }
