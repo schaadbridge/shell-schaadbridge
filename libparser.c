@@ -14,6 +14,16 @@
 
 void get_command(char* line, struct Cmd* cmdline)
 { 
+  // strcpy(cmdline->job_str, line);
+  cmdline->job_str = (char*) malloc(sizeof(char) * strlen(line) + 1);
+  strcpy(cmdline->job_str, line);
+  char* lastChar = &line[(int)strlen(line) - 1];
+  if (*lastChar == '&') {
+    cmdline->foreground = 0;
+    *lastChar = '\0';
+  } else {
+    cmdline->foreground = 1;
+  }
   // initialize input/output redirects to null
   for (int i = 0; i < 3; i++) {
     cmdline->cmd1_fds[i] = NULL;
@@ -97,4 +107,5 @@ bytes in use after execution
 void free_command(struct Cmd* cmdline) {
   free(cmdline->cmd1_argv);
   free(cmdline->cmd2_argv);
+  free(cmdline->job_str);
 }

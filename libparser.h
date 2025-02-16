@@ -4,6 +4,8 @@
 #include <string>
 
 struct Cmd {
+  bool foreground;
+  char *job_str;
   char **cmd1_argv;
   char **cmd2_argv;
   char *cmd1_fds[3];
