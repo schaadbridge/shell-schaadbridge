@@ -1,17 +1,22 @@
 /**
  * CMSC B355 Assignment 2, Part 3: Simple Shell 
  * -- Extended for Assignment 3: Better Shell
+ * -- Extended for Assignment 4: Trust the Process (Part 3)
  * 
  * Implements a cat-themed shell using readline() for user input, fork(), and 
  * execvp() for child processes. The shell quits when the user types "exit".
  * 
  * Better Shell supports file redirection and piping.
+ * Trust the Process (Part 3) implements foregrounding and backgrounding.
+ * 
+ * Known issues: resetting terminal after ctrl-c or ctrl-p in child process
  * 
  * @author: Bridge Schaad
  * @version: February 10, 2025
  */
 
 #include <err.h>
+#include <list>
 #include "libparser.h"
 #include <fcntl.h>
 #include <pwd.h>
@@ -25,10 +30,59 @@
 
 #define ANSI_COLOR_PURPLE "\x1b[35m"
 #define ANSI_COLOR_RESET  "\x1b[0m"
+#define TRUE 1
+#define FALSE 0
+
+int child_pid;
+int parent_pid;
+
+// list<struct Cmd> jobs;
+
+// void printJobs() {
+//   int i = 1;
+//   for (struct Cmd job: jobs) {
+//     char c;
+//     printf("#%d %s Status: [%c]", i, cmd->job_str, );
+//     i++;
+//   }
+// }
 
 void check_err(char* line) {
   perror(line);
   exit(0);
+}
+
+void handler(int signo) {
+  int wstatus;
+  int pid;
+  while (pid = waitpid(child_pid, &wstatus, WNOHANG | WUNTRACED | WCONTINUED) > 0) {
+    if (WIFEXITED(wstatus)) {
+      printf(" exited, status=%d\n", WEXITSTATUS(wstatus));
+    } else if (WIFSIGNALED(wstatus)) {
+      printf(" killed by signal %d\n", WTERMSIG(wstatus));
+    } else if (WIFSTOPPED(wstatus)) {
+      printf(" stopped by signal %d\n", WSTOPSIG(wstatus));
+    } else if (WIFCONTINUED(wstatus)) {
+      printf(" continued\n");
+    }
+  }
+}
+
+void c_handler(int signo) {
+  kill(-child_pid, SIGTERM);
+  exit(0);
+}
+
+void babyC_handler(int signo) {
+  printf("babyC handler reached\n");
+  tcsetpgrp(STDIN_FILENO, parent_pid);
+  exit(0);
+}
+
+void z_handler(int signo) {
+  printf("zhandler reached\n");
+  tcsetpgrp(STDIN_FILENO, parent_pid);
+  kill(-child_pid, SIGSTOP);
 }
 
 int get_prompt(char* buffer) {
@@ -52,12 +106,16 @@ int get_prompt(char* buffer) {
 void single_command(struct Cmd* cmd) {
   int status;
   pid_t pid = fork();
+  signal(SIGCHLD, handler);
+  // signal(SIGTTOU, SIG_IGN); // should already have these? 
+  // signal(SIGTTIN, SIG_IGN);
 
   if (pid == -1) {
     err(EXIT_FAILURE, "fork");
   }
 
   if (pid == 0) { // Child -- execute command
+    setpgid(0, 0);
     if (cmd->cmd1_fds[0] != NULL) { // input redirection
       int fd_in = open(cmd->cmd1_fds[0], O_RDONLY);
       if (fd_in == -1) {
@@ -94,9 +152,33 @@ void single_command(struct Cmd* cmd) {
 
     free_command(cmd);
   } else {
-    if (waitpid(pid, &status, 0) == -1) {
-      check_err("waitpid");
-    };
+    child_pid = pid;
+    parent_pid = getpid();
+    setpgid(pid, pid);
+    signal(SIGINT, c_handler);
+
+    int ret;
+    if (cmd->foreground == TRUE) {
+      tcsetpgrp(STDIN_FILENO, pid);
+      if (ret = waitpid(pid, &status, WUNTRACED) > 0){
+        if (WIFSTOPPED(status)) {
+        tcsetpgrp(STDIN_FILENO, getpgid(0));
+        printf(" stopped by signal %d\n", WSTOPSIG(status));
+        } else if (WIFSIGNALED(status)) {
+          // kill chil[d if ctrl-c
+          tcsetpgrp(STDIN_FILENO, getpgid(0));
+          printf(" interrupted\n");
+        }
+      }
+    } else {
+      if (ret = waitpid(pid, &status, WNOHANG | WUNTRACED | WCONTINUED)== -1) {
+        // make head of background jobs list
+        // struct jobNode temp = backgroundJobsHead;
+        // backgroundJobsHead.cmd = cmd;
+        // backgroundJobsHead.next = temp;
+        check_err("waitpid");
+      };
+    }
   }
 }
 
@@ -226,7 +308,13 @@ int main()
 
   char prompt[256];
   int prompt_ret = get_prompt(prompt);
+
+  // initialize background job list and pointer to foreground job
+  struct Cmd foregroundJob;
+  // struct jobNode backgroundJobs;
   while (prompt_ret == 0) {
+    signal(SIGTTOU, SIG_IGN);
+    signal(SIGTTIN, SIG_IGN);
     // read input in using readline
     char *line = readline( prompt );
     add_history(line);
@@ -251,13 +339,38 @@ int main()
         } else {
           prompt_ret = get_prompt(prompt);
         }
-      } else {
-        // single command
-        if (*cmd.cmd2_argv == NULL) {
-          single_command(&cmd);
-        } else { // pipe command
-          pipe_command(&cmd);
+      } else if (strcmp(cmd.cmd1_argv[0], "fg") == 0) { 
+        // check for job #
+        // or get head from background list
+        if (tcsetpgrp(STDIN_FILENO, child_pid) == -1) {
+          check_err("tcsetpgrp");
         }
+        if (kill(child_pid, SIGCONT)) {
+          check_err("kill");
+        }
+        int wstatus;
+        if (waitpid(child_pid, &wstatus, WUNTRACED) > 0) {
+          if (WIFSTOPPED(wstatus)) {
+            printf("pgid: %d\n", getpgid(0));
+            tcsetpgrp(STDIN_FILENO, getpgid(0));
+            printf(" stopped by signal %d\n", WSTOPSIG(wstatus));
+          } else if (WIFSIGNALED(wstatus)) {
+            // kill child if ctrl-c
+            tcsetpgrp(STDIN_FILENO, getpgid(0));
+            printf(" interrupted\n");
+          }
+        }
+      } else if (strcmp(cmd.cmd1_argv[0], "bg") == 0) { 
+        // check for job #
+        // or get head from background list
+        kill(-child_pid, SIGCONT);
+      }
+        // single command
+      else if (*cmd.cmd2_argv == NULL) {
+        printf("reached");
+        single_command(&cmd);
+      } else { // pipe command
+        pipe_command(&cmd);
       }
     }
     if (&cmd != NULL) {
