@@ -36,21 +36,22 @@
 int child_pid;
 int parent_pid;
 
-// list<struct Cmd> jobs;
+std::list<struct Cmd> jobs;
 
 // void printJobs() {
 //   int i = 1;
 //   for (struct Cmd job: jobs) {
 //     char c;
-//     printf("#%d %s Status: [%c]", i, cmd->job_str, );
+//     printf("#%d %s", i, job.job_str);
 //     i++;
 //   }
 // }
 
-void check_err(char* line) {
-  perror(line);
-  exit(0);
-}
+#define handle_error_en(en, msg) \
+        do { errno = en; perror(msg); exit(EXIT_FAILURE); } while (0)
+
+#define check_err(msg) \
+        do { perror(msg); exit(EXIT_FAILURE); } while (0)
 
 void handler(int signo) {
   int wstatus;
@@ -73,17 +74,17 @@ void c_handler(int signo) {
   exit(0);
 }
 
-void babyC_handler(int signo) {
-  printf("babyC handler reached\n");
-  tcsetpgrp(STDIN_FILENO, parent_pid);
-  exit(0);
-}
+// void babyC_handler(int signo) {
+//   printf("babyC handler reached\n");
+//   tcsetpgrp(STDIN_FILENO, parent_pid);
+//   exit(0);
+// }
 
-void z_handler(int signo) {
-  printf("zhandler reached\n");
-  tcsetpgrp(STDIN_FILENO, parent_pid);
-  kill(-child_pid, SIGSTOP);
-}
+// void z_handler(int signo) {
+//   printf("zhandler reached\n");
+//   tcsetpgrp(STDIN_FILENO, parent_pid);
+//   kill(-child_pid, SIGSTOP);
+// }
 
 int get_prompt(char* buffer) {
   char hostName[32];
@@ -104,6 +105,7 @@ int get_prompt(char* buffer) {
 }
 
 void single_command(struct Cmd* cmd) {
+  printf("entered single\n");
   int status;
   pid_t pid = fork();
   signal(SIGCHLD, handler);
@@ -150,6 +152,7 @@ void single_command(struct Cmd* cmd) {
       check_err("execvp");
     }
 
+    printf("when?\n");
     free_command(cmd);
   } else {
     child_pid = pid;
@@ -162,22 +165,24 @@ void single_command(struct Cmd* cmd) {
       tcsetpgrp(STDIN_FILENO, pid);
       if (ret = waitpid(pid, &status, WUNTRACED) > 0){
         if (WIFSTOPPED(status)) {
-        tcsetpgrp(STDIN_FILENO, getpgid(0));
-        printf(" stopped by signal %d\n", WSTOPSIG(status));
+          tcsetpgrp(STDIN_FILENO, getpgid(0));
+          jobs.push_back(*cmd);
+          printf(" stopped by signal %d\n", WSTOPSIG(status));
         } else if (WIFSIGNALED(status)) {
           // kill chil[d if ctrl-c
           tcsetpgrp(STDIN_FILENO, getpgid(0));
           printf(" interrupted\n");
         }
+      } else {
+        check_err("waitpid");
       }
+      tcsetpgrp(STDIN_FILENO, getpgid(0));
     } else {
       if (ret = waitpid(pid, &status, WNOHANG | WUNTRACED | WCONTINUED)== -1) {
-        // make head of background jobs list
-        // struct jobNode temp = backgroundJobsHead;
-        // backgroundJobsHead.cmd = cmd;
-        // backgroundJobsHead.next = temp;
+        // add to end of background jobs list
         check_err("waitpid");
       };
+      jobs.push_back(*cmd);
     }
   }
 }
@@ -328,24 +333,28 @@ int main()
     // split command into arguments w/ execvp
     struct Cmd cmd;
     get_command(line, &cmd);
+    printf("reached? %s\n", cmd.cmd1_argv[0]);
 
     // fork off child process
     if (*cmd.cmd1_argv != NULL) {
       // change directory if user types "cd"
+      printf("reached1? %s\n", cmd.cmd1_argv[0]);
       if (strcmp(cmd.cmd1_argv[0], "cd") == 0) {
         int ret = chdir(cmd.cmd1_argv[1]);
         if (ret != 0) {
-          check_err("chdir");
+          perror("cd"); // non-crashing error!
         } else {
           prompt_ret = get_prompt(prompt);
         }
       } else if (strcmp(cmd.cmd1_argv[0], "fg") == 0) { 
         // check for job #
-        // or get head from background list
-        if (tcsetpgrp(STDIN_FILENO, child_pid) == -1) {
+        // or get last from job list
+        pid_t new_fg = jobs.back().pgrp;
+        printf("newfg: %d\n", new_fg);
+        if (tcsetpgrp(STDIN_FILENO, new_fg) == -1) {
           check_err("tcsetpgrp");
         }
-        if (kill(child_pid, SIGCONT)) {
+        if (kill(-new_fg, SIGCONT)) {
           check_err("kill");
         }
         int wstatus;
@@ -363,7 +372,8 @@ int main()
       } else if (strcmp(cmd.cmd1_argv[0], "bg") == 0) { 
         // check for job #
         // or get head from background list
-        kill(-child_pid, SIGCONT);
+        pid_t new_fg = jobs.back().pgrp;
+        kill(-new_fg, SIGCONT);
       }
         // single command
       else if (*cmd.cmd2_argv == NULL) {

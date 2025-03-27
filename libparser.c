@@ -11,12 +11,14 @@
 #include "libparser.h"
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 void get_command(char* line, struct Cmd* cmdline)
 { 
   // strcpy(cmdline->job_str, line);
   cmdline->job_str = (char*) malloc(sizeof(char) * strlen(line) + 1);
   strcpy(cmdline->job_str, line);
+  cmdline->pgrp = getpgid(0);
   char* lastChar = &line[(int)strlen(line) - 1];
   if (*lastChar == '&') {
     cmdline->foreground = 0;
@@ -55,8 +57,8 @@ void get_command(char* line, struct Cmd* cmdline)
         cmdline->cmd1_fds[2] = tok;
       }
     }
-    else {
-      cmdline->cmd1_argv[argv_idx] = tok;
+    else if (argv_idx < cmdline->max_argv - 1) { 
+      cmdline->cmd1_argv[argv_idx] = tok; 
       argv_idx++;
     }
     tok = strtok(NULL, " ");
@@ -91,7 +93,7 @@ void get_command(char* line, struct Cmd* cmdline)
         cmdline->cmd2_fds[2] = tok;
       }
     }
-    else {
+    else if (argv_idx >= cmdline->max_argv - 1) {
       cmdline->cmd2_argv[argv_idx] = tok;
       argv_idx++;
     }

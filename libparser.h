@@ -2,6 +2,7 @@
 #define parser_H_
 
 #include <string>
+#include <sys/types.h>
 
 struct Cmd {
   bool foreground;
@@ -11,6 +12,7 @@ struct Cmd {
   char *cmd1_fds[3];
   char *cmd2_fds[3];
   const int max_argv = 8;
+  pid_t pgrp;
 };
 
 extern void get_command(char* line, struct Cmd* cmdline);

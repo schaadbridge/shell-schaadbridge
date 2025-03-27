@@ -15,6 +15,8 @@
 void print_cmd(struct Cmd* cmd)
 {
   // implement me
+  printf("job_str: %s\n", cmd->job_str);
+  printf("foreground: %d\n", cmd->foreground);
   printf("cmd1_args: [");
   int i;
   for (i = 0; i < cmd->max_argv; i++) {
@@ -28,7 +30,7 @@ void print_cmd(struct Cmd* cmd)
     printf("%s ", cmd->cmd2_argv[i]);
     if (cmd->cmd2_argv[i] == NULL) {
       break;
-    }
+    } 
   }
   printf("]\n\n");
   for (int j = 0; j < 3; j++) {
@@ -46,21 +48,23 @@ int main()
   char line[2048];
   struct Cmd cmd;
 
-  strncpy(line, "ls -l", 2048);      
-  get_command(line, &cmd);
-  print_cmd(&cmd);
+  // strncpy(line, "ls -l", 2048);      
+  // get_command(line, &cmd);
+  // print_cmd(&cmd);
 
-  strncpy(line, "ls | sort", 2048);      
+  strncpy(line, "ls | sort &", 2048);      
   get_command(line, &cmd);
   print_cmd(&cmd);
+  free_command(&cmd);
 
-  strncpy(line, "ls -l 1> out.txt 2> error.txt", 2048);      
+  strncpy(line, "echo int main() { int* i = 0; *i = 2; } 1> crash.c", 2048);      
   get_command(line, &cmd);
   print_cmd(&cmd);
+  free_command(&cmd);
 
-  strncpy(line, "grep -i blah < input.txt | sort 1> output.txt", 2048);      
-  get_command(line, &cmd);
-  print_cmd(&cmd);
+  // strncpy(line, "grep -i blah < input.txt | sort 1> output.txt", 2048);      
+  // get_command(line, &cmd);
+  // print_cmd(&cmd);
 
   return 0;
 }
