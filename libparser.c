@@ -19,6 +19,8 @@ void get_command(char* line, struct Cmd* cmdline)
   cmdline->job_str = (char*) malloc(sizeof(char) * strlen(line) + 1);
   strcpy(cmdline->job_str, line);
   cmdline->pgrp = getpgid(0);
+  cmdline->max_argv = 8;
+
   char* lastChar = &line[(int)strlen(line) - 1];
   if (*lastChar == '&') {
     cmdline->foreground = 0;
@@ -57,9 +59,14 @@ void get_command(char* line, struct Cmd* cmdline)
         cmdline->cmd1_fds[2] = tok;
       }
     }
-    else if (argv_idx < cmdline->max_argv - 1) { 
-      cmdline->cmd1_argv[argv_idx] = tok; 
-      argv_idx++;
+    else {
+      if (argv_idx < cmdline->max_argv - 1) { // Ignore arguments after max reached.
+        cmdline->cmd1_argv[argv_idx] = tok; 
+        argv_idx++;
+      }  else {
+        printf("Too many arguments for command 1! Max args: %d\n", cmdline->max_argv - 1);
+        break;
+      }
     }
     tok = strtok(NULL, " ");
   }
@@ -93,9 +100,14 @@ void get_command(char* line, struct Cmd* cmdline)
         cmdline->cmd2_fds[2] = tok;
       }
     }
-    else if (argv_idx >= cmdline->max_argv - 1) {
-      cmdline->cmd2_argv[argv_idx] = tok;
-      argv_idx++;
+    else {
+      if (argv_idx < cmdline->max_argv - 1) { // Ignore args beyond max.
+        cmdline->cmd2_argv[argv_idx] = tok;
+        argv_idx++;
+      } else {
+        printf("Too many arguments for command 2! Max args: %d\n", cmdline->max_argv - 1);
+        break;
+      }
     }
     tok = strtok(NULL, " ");
   }
@@ -110,4 +122,6 @@ void free_command(struct Cmd* cmdline) {
   free(cmdline->cmd1_argv);
   free(cmdline->cmd2_argv);
   free(cmdline->job_str);
+
+  free(cmdline);
 }

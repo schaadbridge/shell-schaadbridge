@@ -11,7 +11,7 @@ struct Cmd {
   char **cmd2_argv;
   char *cmd1_fds[3];
   char *cmd2_fds[3];
-  const int max_argv = 8;
+  int max_argv;
   pid_t pgrp;
 };
 

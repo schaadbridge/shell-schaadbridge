@@ -36,13 +36,13 @@
 int child_pid;
 int parent_pid;
 
-std::list<struct Cmd> jobs;
+std::list<struct Cmd*> jobs;
 
 void printJobs() {
   int i = 1;
-  for (struct Cmd job: jobs) {
+  for (struct Cmd* job: jobs) {
     char c;
-    printf("#%d %s PGID: %d\n", i, job.job_str, job.pgrp);
+    printf("#%d %s PGID: %d\n", i, job->job_str, job->pgrp);
     i++;
   }
 }
@@ -70,9 +70,9 @@ void handler(int signo) {
 /* Kill all child processes on ctrl-C*/
 void c_handler(int signo) {
   kill(-child_pid, SIGTERM);
-  // for (struct Cmd job: jobs) {
-  //   free(job);
-  // }
+  for (struct Cmd* job: jobs) {
+    free_command(job);
+  }
   exit(0);
 }
 
@@ -158,16 +158,17 @@ void single_command(struct Cmd* cmd) {
     child_pid = pid;
     parent_pid = getpid();
     cmd->pgrp = child_pid; // Track job's new process group
+    printf("cmd->pgrp: %d\n", cmd->pgrp);
     setpgid(pid, pid); // Parent process group
     signal(SIGINT, c_handler);
 
     int ret;
-    if (cmd->foreground == TRUE) {
+    if (cmd->foreground == TRUE) { // foreground job
       tcsetpgrp(STDIN_FILENO, pid);
       if (ret = waitpid(pid, &status, WUNTRACED) > 0){
         if (WIFSTOPPED(status)) {
           tcsetpgrp(STDIN_FILENO, getpgid(0));
-          jobs.push_back(*cmd);
+          jobs.push_back(cmd);
           printf(" stopped by signal %d\n", WSTOPSIG(status));
         } else {
           if (WIFSIGNALED(status)) {
@@ -175,18 +176,19 @@ void single_command(struct Cmd* cmd) {
             tcsetpgrp(STDIN_FILENO, getpgid(0));
             printf(" interrupted\n");
           } 
+          printf("freeing\n");
           free_command(cmd); // free finished/killed command
         }
       } else {
         check_err("waitpid");
       }
       tcsetpgrp(STDIN_FILENO, getpgid(0));
-    } else {
+    } else { // background job
       if (ret = waitpid(pid, &status, WNOHANG | WUNTRACED | WCONTINUED)== -1) {
         // add to end of background jobs list
         check_err("waitpid");
       };
-      jobs.push_back(*cmd); // Add to joblist if interrupted
+      jobs.push_back(cmd); // Add to joblist if interrupted
     }
   }
 }
@@ -311,6 +313,7 @@ void pipe_command(struct Cmd* cmd) {
 
 int main()
 {
+  printf("%ld\n", sizeof(struct Cmd));
   printf("    /\\_/\\ \n"
          "= ( • . • ) =\n"
          "   /      \\     \n\n");
@@ -329,35 +332,40 @@ int main()
     add_history(line);
 
     // Quit if the user types "exit" 
-    // TODO: ctrl c
     if (strcmp("exit", line) == 0) {
       printf(ANSI_COLOR_PURPLE "purrrrrrrrrrr\n" ANSI_COLOR_RESET);
       kill(-child_pid, SIGTERM); // Kill all child processes
       exit(0);
     }
+    
+    // Don't allocate or parse empty command
+    if (strcmp("", line) == 0) {
+      free(line);
+      continue;
+    }
 
     // split command into arguments w/ execvp
-    struct Cmd cmd;
-    get_command(line, &cmd);
-    printf("jobstr: %s\n", cmd.job_str);
+    struct Cmd* cmd = (struct Cmd*) malloc(sizeof(struct Cmd));
+    get_command(line, cmd);
+    printf("jobstr: %s\n", cmd->job_str);
 
     // fork off child process
-    if (*cmd.cmd1_argv != NULL) {
+    if (*cmd->cmd1_argv != NULL) {
       // change directory if user types "cd"
       // printf("reached1? %s\n", cmd.cmd1_argv[0]);
-      if (strcmp(cmd.cmd1_argv[0], "cd") == 0) {
-        int ret = chdir(cmd.cmd1_argv[1]);
+      if (strcmp(cmd->cmd1_argv[0], "cd") == 0) {
+        int ret = chdir(cmd->cmd1_argv[1]);
         if (ret != 0) {
           perror("cd"); 
         } else {
           prompt_ret = get_prompt(prompt);
         }
-      } else if (strcmp(cmd.cmd1_argv[0], "jobs") == 0) {
+      } else if (strcmp(cmd->cmd1_argv[0], "jobs") == 0) {
         printJobs();
-      } else if (strcmp(cmd.cmd1_argv[0], "fg") == 0) { 
+      } else if (strcmp(cmd->cmd1_argv[0], "fg") == 0) { 
         // check for job #
         // or get last from job list
-        pid_t new_fg = jobs.back().pgrp;
+        pid_t new_fg = jobs.back()->pgrp;
         printf("newfg: %d\n", new_fg);
         int ret = tcsetpgrp(STDIN_FILENO, new_fg);
         printf("ret: %d\n", ret);
@@ -379,18 +387,18 @@ int main()
             printf(" interrupted\n");
           }
         }
-      } else if (strcmp(cmd.cmd1_argv[0], "bg") == 0) { 
+      } else if (strcmp(cmd->cmd1_argv[0], "bg") == 0) { 
         // check for job #
         // or get head from background list
-        pid_t new_fg = jobs.back().pgrp;
+        pid_t new_fg = jobs.back()->pgrp;
         kill(-new_fg, SIGCONT);
       }
         // single command+
-      else if (*cmd.cmd2_argv == NULL) {
+      else if (*cmd->cmd2_argv == NULL) {
         // printf("reached");
-        single_command(&cmd);
+        single_command(cmd);
       } else { // pipe command
-        pipe_command(&cmd);
+        pipe_command(cmd);
       }
     }
     free(line);
