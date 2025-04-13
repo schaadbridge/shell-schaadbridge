@@ -38,21 +38,19 @@ int parent_pid;
 
 std::list<struct Cmd> jobs;
 
-// void printJobs() {
-//   int i = 1;
-//   for (struct Cmd job: jobs) {
-//     char c;
-//     printf("#%d %s", i, job.job_str);
-//     i++;
-//   }
-// }
-
-#define handle_error_en(en, msg) \
-        do { errno = en; perror(msg); exit(EXIT_FAILURE); } while (0)
+void printJobs() {
+  int i = 1;
+  for (struct Cmd job: jobs) {
+    char c;
+    printf("#%d %s PGID: %d\n", i, job.job_str, job.pgrp);
+    i++;
+  }
+}
 
 #define check_err(msg) \
         do { perror(msg); exit(EXIT_FAILURE); } while (0)
 
+/* Signal handler */
 void handler(int signo) {
   int wstatus;
   int pid;
@@ -69,8 +67,12 @@ void handler(int signo) {
   }
 }
 
+/* Kill all child processes on ctrl-C*/
 void c_handler(int signo) {
   kill(-child_pid, SIGTERM);
+  // for (struct Cmd job: jobs) {
+  //   free(job);
+  // }
   exit(0);
 }
 
@@ -86,6 +88,7 @@ void c_handler(int signo) {
 //   kill(-child_pid, SIGSTOP);
 // }
 
+/* Generate shell prompt based on cwd*/
 int get_prompt(char* buffer) {
   char hostName[32];
   char cwdName[128];
@@ -104,20 +107,19 @@ int get_prompt(char* buffer) {
   return 0;
 }
 
+/* Execute single command (no contents in args2)*/
 void single_command(struct Cmd* cmd) {
-  printf("entered single\n");
   int status;
-  pid_t pid = fork();
-  signal(SIGCHLD, handler);
-  // signal(SIGTTOU, SIG_IGN); // should already have these? 
-  // signal(SIGTTIN, SIG_IGN);
 
+  pid_t pid = fork(); // Fork -- command in child process, parent does cleanup
+  signal(SIGCHLD, handler);
   if (pid == -1) {
     err(EXIT_FAILURE, "fork");
   }
 
-  if (pid == 0) { // Child -- execute command
-    setpgid(0, 0);
+  if (pid == 0) { // Child process
+    setpgid(0, 0); // Put child in new process group
+
     if (cmd->cmd1_fds[0] != NULL) { // input redirection
       int fd_in = open(cmd->cmd1_fds[0], O_RDONLY);
       if (fd_in == -1) {
@@ -148,16 +150,15 @@ void single_command(struct Cmd* cmd) {
       }
       close(fd_err);
     }
-    if (execvp(cmd->cmd1_argv[0], cmd->cmd1_argv) == -1) {
+    
+    if (execvp(cmd->cmd1_argv[0], cmd->cmd1_argv) == -1) { // Execute with execvp
       check_err("execvp");
     }
-
-    printf("when?\n");
-    free_command(cmd);
-  } else {
+  } else { // Parent process
     child_pid = pid;
     parent_pid = getpid();
-    setpgid(pid, pid);
+    cmd->pgrp = child_pid; // Track job's new process group
+    setpgid(pid, pid); // Parent process group
     signal(SIGINT, c_handler);
 
     int ret;
@@ -168,10 +169,13 @@ void single_command(struct Cmd* cmd) {
           tcsetpgrp(STDIN_FILENO, getpgid(0));
           jobs.push_back(*cmd);
           printf(" stopped by signal %d\n", WSTOPSIG(status));
-        } else if (WIFSIGNALED(status)) {
-          // kill chil[d if ctrl-c
-          tcsetpgrp(STDIN_FILENO, getpgid(0));
-          printf(" interrupted\n");
+        } else {
+          if (WIFSIGNALED(status)) {
+            // kill child if ctrl-c
+            tcsetpgrp(STDIN_FILENO, getpgid(0));
+            printf(" interrupted\n");
+          } 
+          free_command(cmd); // free finished/killed command
         }
       } else {
         check_err("waitpid");
@@ -182,7 +186,7 @@ void single_command(struct Cmd* cmd) {
         // add to end of background jobs list
         check_err("waitpid");
       };
-      jobs.push_back(*cmd);
+      jobs.push_back(*cmd); // Add to joblist if interrupted
     }
   }
 }
@@ -325,37 +329,43 @@ int main()
     add_history(line);
 
     // Quit if the user types "exit" 
+    // TODO: ctrl c
     if (strcmp("exit", line) == 0) {
       printf(ANSI_COLOR_PURPLE "purrrrrrrrrrr\n" ANSI_COLOR_RESET);
+      kill(-child_pid, SIGTERM); // Kill all child processes
       exit(0);
     }
 
     // split command into arguments w/ execvp
     struct Cmd cmd;
     get_command(line, &cmd);
-    printf("reached? %s\n", cmd.cmd1_argv[0]);
+    printf("jobstr: %s\n", cmd.job_str);
 
     // fork off child process
     if (*cmd.cmd1_argv != NULL) {
       // change directory if user types "cd"
-      printf("reached1? %s\n", cmd.cmd1_argv[0]);
+      // printf("reached1? %s\n", cmd.cmd1_argv[0]);
       if (strcmp(cmd.cmd1_argv[0], "cd") == 0) {
         int ret = chdir(cmd.cmd1_argv[1]);
         if (ret != 0) {
-          perror("cd"); // non-crashing error!
+          perror("cd"); 
         } else {
           prompt_ret = get_prompt(prompt);
         }
+      } else if (strcmp(cmd.cmd1_argv[0], "jobs") == 0) {
+        printJobs();
       } else if (strcmp(cmd.cmd1_argv[0], "fg") == 0) { 
         // check for job #
         // or get last from job list
         pid_t new_fg = jobs.back().pgrp;
         printf("newfg: %d\n", new_fg);
-        if (tcsetpgrp(STDIN_FILENO, new_fg) == -1) {
-          check_err("tcsetpgrp");
+        int ret = tcsetpgrp(STDIN_FILENO, new_fg);
+        printf("ret: %d\n", ret);
+        if (ret == -1) {
+          check_err("tcsetpgrp"); // b/c this is base image, this will crash shell
         }
         if (kill(-new_fg, SIGCONT)) {
-          check_err("kill");
+          check_err("kill"); // this will crash shell
         }
         int wstatus;
         if (waitpid(child_pid, &wstatus, WUNTRACED) > 0) {
@@ -375,16 +385,13 @@ int main()
         pid_t new_fg = jobs.back().pgrp;
         kill(-new_fg, SIGCONT);
       }
-        // single command
+        // single command+
       else if (*cmd.cmd2_argv == NULL) {
-        printf("reached");
+        // printf("reached");
         single_command(&cmd);
       } else { // pipe command
         pipe_command(&cmd);
       }
-    }
-    if (&cmd != NULL) {
-      free_command(&cmd);
     }
     free(line);
   }
